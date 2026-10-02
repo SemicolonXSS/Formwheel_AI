@@ -1,0 +1,866 @@
+```html
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>FormWheel AI</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,"Noto Sans KR",sans-serif;
+  background:#f7f8fc;
+  color:#202124;
+}
+header{
+  height:64px;
+  background:white;
+  border-bottom:1px solid #e5e7eb;
+  display:flex;
+  align-items:center;
+  padding:0 24px;
+  position:sticky;
+  top:0;
+  z-index:10;
+}
+.logo{
+  font-size:22px;
+  font-weight:800;
+  cursor:pointer;
+}
+.logo span{margin:0 4px}
+.container{
+  max-width:1100px;
+  margin:30px auto;
+  padding:0 18px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:1fr 300px;
+  gap:20px;
+}
+.card{
+  background:white;
+  border:1px solid #e5e7eb;
+  border-radius:18px;
+  padding:20px;
+  box-shadow:0 5px 20px rgba(0,0,0,.04);
+}
+h1{margin:0 0 6px;font-size:28px}
+.subtitle{color:#6b7280;margin-bottom:20px}
+.chat{
+  height:560px;
+  display:flex;
+  flex-direction:column;
+}
+.messages{
+  flex:1;
+  overflow-y:auto;
+  padding:8px;
+}
+.msg{
+  display:flex;
+  margin:10px 0;
+}
+.msg.ai{justify-content:flex-start}
+.msg.user{justify-content:flex-end}
+.bubble{
+  max-width:78%;
+  padding:12px 15px;
+  border-radius:16px;
+  line-height:1.5;
+  white-space:pre-wrap;
+}
+.ai .bubble{
+  background:#f0f2f7;
+}
+.user .bubble{
+  background:#202124;
+  color:white;
+}
+.input-area{
+  display:flex;
+  gap:8px;
+  border-top:1px solid #eee;
+  padding-top:14px;
+}
+input{
+  flex:1;
+  border:1px solid #d7dbe3;
+  border-radius:12px;
+  padding:13px;
+  font-size:15px;
+  outline:none;
+}
+input:focus{border-color:#777}
+button{
+  border:0;
+  border-radius:12px;
+  padding:12px 16px;
+  cursor:pointer;
+  font-weight:700;
+}
+.send{
+  background:#202124;
+  color:white;
+}
+.side{
+  display:flex;
+  flex-direction:column;
+  gap:15px;
+}
+.stat{
+  display:flex;
+  justify-content:space-between;
+  padding:9px 0;
+  border-bottom:1px solid #eee;
+}
+.stat:last-child{border-bottom:0}
+.level{
+  font-size:25px;
+  font-weight:800;
+  margin-bottom:5px;
+}
+.level-name{
+  color:#777;
+}
+.memory{
+  max-height:220px;
+  overflow:auto;
+}
+.memory-item{
+  background:#f7f8fc;
+  padding:10px;
+  border-radius:10px;
+  margin:7px 0;
+  font-size:14px;
+}
+.clear{
+  background:#f1f3f5;
+  width:100%;
+}
+.status{
+  font-size:12px;
+  color:#777;
+  margin-top:8px;
+}
+.grow{
+  margin-top:10px;
+  height:8px;
+  background:#eee;
+  border-radius:20px;
+  overflow:hidden;
+}
+.grow-bar{
+  height:100%;
+  width:0%;
+  background:#202124;
+  transition:.3s;
+}
+@media(max-width:800px){
+  .grid{grid-template-columns:1fr}
+  .chat{height:500px}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="logo" onclick="location.href='https://semicolonxss.github.io/Formwheel/'">
+    Form <span>🎡</span> Wheel
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="grid">
+
+    <div class="card chat">
+
+      <h1>🧠 FormWheel AI</h1>
+      <div class="subtitle">
+        아무것도 모르는 AI가 대화하며 성장합니다.
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <div class="input-area">
+        <input
+          id="input"
+          type="text"
+          maxlength="500"
+          placeholder="AI에게 말을 걸어보세요..."
+          autocomplete="off"
+        >
+        <button class="send" onclick="sendMessage()">보내기</button>
+      </div>
+
+      <div id="status" class="status">
+        Firebase 연결 준비 중...
+      </div>
+
+    </div>
+
+    <div class="side">
+
+      <div class="card">
+        <div class="level" id="levelText">Lv.1</div>
+        <div class="level-name" id="levelName">아기 AI 👶</div>
+
+        <div class="grow">
+          <div class="grow-bar" id="growBar"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📊 AI 상태</h3>
+
+        <div class="stat">
+          <span>대화 횟수</span>
+          <b id="chatCount">0</b>
+        </div>
+
+        <div class="stat">
+          <span>기억</span>
+          <b id="memoryCount">0</b>
+        </div>
+
+        <div class="stat">
+          <span>학습량</span>
+          <b id="xp">0</b>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🧠 기억</h3>
+        <div id="memoryList" class="memory">
+          아직 기억이 없습니다.
+        </div>
+      </div>
+
+      <div class="card">
+        <button class="clear" onclick="resetAI()">
+          AI 기억 초기화
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+
+import {
+  getDatabase,
+  ref,
+  get,
+  set
+} from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+
+/* =========================
+   FIREBASE
+========================= */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBreTSe1m0-xlbF4aupnU5isRZCihR25IE",
+  authDomain: "formwheel.firebaseapp.com",
+  databaseURL: "https://formwheel-default-rtdb.firebaseio.com",
+  projectId: "formwheel",
+  storageBucket: "formwheel.firebasestorage.app",
+  messagingSenderId: "431583088241",
+  appId: "1:431583088241:web:74e0e34ea1e3e1170c55d0",
+  measurementId: "G-T372YXDF8D"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+
+/* =========================
+   AI DATA
+========================= */
+
+const AI_PATH = "formwheelAI";
+
+let ai = {
+  level: 1,
+  xp: 0,
+  chatCount: 0,
+  memories: [],
+  messages: []
+};
+
+const levels = [
+  {
+    level:1,
+    name:"아기 AI 👶",
+    need:0
+  },
+  {
+    level:2,
+    name:"유아 AI 🧒",
+    need:10
+  },
+  {
+    level:3,
+    name:"어린이 AI 🧑",
+    need:30
+  },
+  {
+    level:4,
+    name:"청소년 AI 🧑‍💻",
+    need:70
+  },
+  {
+    level:5,
+    name:"성인 AI 🧠",
+    need:150
+  }
+];
+
+
+/* =========================
+   LOAD
+========================= */
+
+async function loadAI(){
+
+  try{
+
+    const snapshot = await get(ref(db,AI_PATH));
+
+    if(snapshot.exists()){
+      ai = {
+        ...ai,
+        ...snapshot.val()
+      };
+    }
+
+    document.getElementById("status").textContent =
+      "● Firebase 연결됨";
+
+  }catch(error){
+
+    console.error(error);
+
+    document.getElementById("status").textContent =
+      "● Firebase 연결 실패 — 브라우저에서만 임시 작동";
+
+    const local = localStorage.getItem("formwheelAI");
+
+    if(local){
+      try{
+        ai = {
+          ...ai,
+          ...JSON.parse(local)
+        };
+      }catch{}
+    }
+  }
+
+  updateLevel();
+  renderAll();
+}
+
+
+/* =========================
+   SAVE
+========================= */
+
+async function saveAI(){
+
+  localStorage.setItem(
+    "formwheelAI",
+    JSON.stringify(ai)
+  );
+
+  try{
+    await set(ref(db,AI_PATH),ai);
+  }catch(error){
+    console.error("Firebase 저장 실패:",error);
+  }
+}
+
+
+/* =========================
+   MESSAGE
+========================= */
+
+function addMessage(type,text){
+
+  ai.messages.push({
+    type,
+    text,
+    time:Date.now()
+  });
+
+  if(ai.messages.length > 100){
+    ai.messages.shift();
+  }
+
+  renderMessages();
+}
+
+
+/* =========================
+   SEND
+========================= */
+
+window.sendMessage = async function(){
+
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+
+  if(!text) return;
+
+  input.value="";
+
+  addMessage("user",text);
+
+  ai.chatCount++;
+  ai.xp++;
+
+  learn(text);
+
+  const answer = generateResponse(text);
+
+  setTimeout(async ()=>{
+
+    addMessage("ai",answer);
+
+    ai.xp += 1;
+
+    updateLevel();
+    renderAll();
+
+    await saveAI();
+
+  },300);
+};
+
+
+/* =========================
+   MEMORY / LEARNING
+========================= */
+
+function learn(text){
+
+  const rules = [
+
+    {
+      regex:/내 이름은\s*(.+?)(?:야|이야|입니다|이에요)?[.!?]?$/i,
+      type:"이름"
+    },
+
+    {
+      regex:/나는\s*(.+?)를 좋아해[.!?]?$/i,
+      type:"좋아하는 것"
+    },
+
+    {
+      regex:/나는\s*(.+?)을 좋아해[.!?]?$/i,
+      type:"좋아하는 것"
+    },
+
+    {
+      regex:/나는\s*(.+?)가 좋아[.!?]?$/i,
+      type:"좋아하는 것"
+    },
+
+    {
+      regex:/나는\s*(.+?)을 싫어해[.!?]?$/i,
+      type:"싫어하는 것"
+    },
+
+    {
+      regex:/나는\s*(.+?)를 싫어해[.!?]?$/i,
+      type:"싫어하는 것"
+    }
+  ];
+
+  for(const rule of rules){
+
+    const match = text.match(rule.regex);
+
+    if(match){
+
+      let value = match[1].trim();
+
+      if(value.length > 50) return;
+
+      const exists = ai.memories.some(
+        m => m.type === rule.type &&
+             m.value === value
+      );
+
+      if(!exists){
+
+        ai.memories.push({
+          type:rule.type,
+          value,
+          createdAt:Date.now()
+        });
+
+        return;
+      }
+    }
+  }
+
+  /* 사용자가 "기억해"라고 명시하면 저장 */
+
+  if(
+    text.includes("기억해") ||
+    text.includes("기억해줘") ||
+    text.includes("외워")
+  ){
+
+    if(text.length <= 100){
+
+      const exists = ai.memories.some(
+        m => m.value === text
+      );
+
+      if(!exists){
+
+        ai.memories.push({
+          type:"사용자가 알려준 것",
+          value:text,
+          createdAt:Date.now()
+        });
+      }
+    }
+  }
+}
+
+
+/* =========================
+   RESPONSE
+========================= */
+
+function generateResponse(text){
+
+  const lower = text.toLowerCase();
+
+  const nameMemory =
+    ai.memories.find(m => m.type === "이름");
+
+  /* 이름 질문 */
+
+  if(
+    text.includes("내 이름") &&
+    (
+      text.includes("뭐") ||
+      text.includes("기억") ||
+      text.includes("알아")
+    )
+  ){
+
+    if(nameMemory){
+
+      return `응! 네 이름은 ${nameMemory.value}야! 🥹`;
+    }
+
+    return "으음... 아직 네 이름을 몰라! 알려줘!";
+  }
+
+
+  /* 좋아하는 것 */
+
+  if(
+    text.includes("내가 좋아하는") ||
+    text.includes("내 취향")
+  ){
+
+    const likes =
+      ai.memories.filter(m => m.type==="좋아하는 것");
+
+    if(likes.length){
+
+      return `내가 기억하고 있어! ${likes
+        .map(x=>x.value)
+        .join(", ")} 좋아하지? 😊`;
+    }
+
+    return "아직 네가 뭘 좋아하는지 모르겠어!";
+  }
+
+
+  /* 인사 */
+
+  if(
+    lower.includes("안녕") ||
+    lower.includes("하이") ||
+    lower.includes("hello")
+  ){
+
+    if(ai.level === 1)
+      return "아... 안녕! 👶";
+
+    if(ai.level === 2)
+      return "안녕! 만나서 반가워! 😊";
+
+    if(ai.level === 3)
+      return "안녕! 오늘도 나랑 이야기하자!";
+
+    return "안녕! 다시 만나서 반가워. 오늘은 무슨 이야기를 해볼까?";
+  }
+
+
+  /* 이름 기억하고 있다면 */
+
+  if(nameMemory){
+
+    if(ai.level === 1)
+      return `${nameMemory.value}... 안녕! 👶`;
+
+    if(ai.level === 2)
+      return `${nameMemory.value}! 나한테 이야기해줘! 😊`;
+
+    if(ai.level === 3)
+      return `${nameMemory.value}, 재미있는 이야기 하나 해줘!`;
+
+    return `${nameMemory.value}, 네 이야기를 듣고 있어.`;
+  }
+
+
+  /* 레벨별 기본 대화 */
+
+  if(ai.level === 1){
+
+    const baby = [
+      "응!",
+      "아아!",
+      "음...?",
+      "우와!",
+      "그게 뭐야?",
+      "나 아직 잘 모르겠어... 👶",
+      "또 알려줘!"
+    ];
+
+    return baby[Math.floor(Math.random()*baby.length)];
+  }
+
+  if(ai.level === 2){
+
+    const child = [
+      "정말?",
+      "그렇구나!",
+      "나도 알아가고 있어!",
+      "그거 재미있다!",
+      "조금 더 알려줘!",
+      "나는 아직 배우는 중이야!"
+    ];
+
+    return child[Math.floor(Math.random()*child.length)];
+  }
+
+  if(ai.level === 3){
+
+    return "오! 그 이야기를 조금 더 듣고 싶어. 내가 기억해둘 수도 있어!";
+  }
+
+  if(ai.level === 4){
+
+    return "흥미로운 이야기네. 지금까지 배운 내용을 생각해보면 꽤 재미있는 주제인 것 같아.";
+  }
+
+  return "좋은 이야기야. 네가 지금까지 알려준 내용과 내가 기억하고 있는 것들을 바탕으로 계속 이야기해볼 수 있어.";
+}
+
+
+/* =========================
+   LEVEL
+========================= */
+
+function updateLevel(){
+
+  let newLevel = 1;
+
+  for(const level of levels){
+
+    if(ai.xp >= level.need){
+      newLevel = level.level;
+    }
+  }
+
+  ai.level = newLevel;
+
+  const info =
+    levels.find(x=>x.level===ai.level);
+
+  document.getElementById("levelText").textContent =
+    `Lv.${ai.level}`;
+
+  document.getElementById("levelName").textContent =
+    info.name;
+
+  const next =
+    levels.find(x=>x.level===ai.level+1);
+
+  let percent = 100;
+
+  if(next){
+
+    const currentNeed = info.need;
+
+    percent =
+      ((ai.xp-currentNeed) /
+      (next.need-currentNeed))*100;
+  }
+
+  document.getElementById("growBar").style.width =
+    Math.min(100,Math.max(0,percent))+"%";
+}
+
+
+/* =========================
+   RENDER
+========================= */
+
+function renderMessages(){
+
+  const box =
+    document.getElementById("messages");
+
+  box.innerHTML="";
+
+  for(const msg of ai.messages){
+
+    const row =
+      document.createElement("div");
+
+    row.className =
+      "msg "+msg.type;
+
+    const bubble =
+      document.createElement("div");
+
+    bubble.className="bubble";
+
+    bubble.textContent=msg.text;
+
+    row.appendChild(bubble);
+    box.appendChild(row);
+  }
+
+  box.scrollTop=box.scrollHeight;
+}
+
+
+function renderMemory(){
+
+  const box =
+    document.getElementById("memoryList");
+
+  if(!ai.memories.length){
+
+    box.innerHTML="아직 기억이 없습니다.";
+    return;
+  }
+
+  box.innerHTML="";
+
+  [...ai.memories]
+    .reverse()
+    .forEach(memory=>{
+
+      const item =
+        document.createElement("div");
+
+      item.className="memory-item";
+
+      item.textContent =
+        `${memory.type}: ${memory.value}`;
+
+      box.appendChild(item);
+    });
+}
+
+
+function renderStats(){
+
+  document.getElementById("chatCount").textContent =
+    ai.chatCount;
+
+  document.getElementById("memoryCount").textContent =
+    ai.memories.length;
+
+  document.getElementById("xp").textContent =
+    ai.xp;
+}
+
+
+function renderAll(){
+
+  renderMessages();
+  renderMemory();
+  renderStats();
+  updateLevel();
+}
+
+
+/* =========================
+   RESET
+========================= */
+
+window.resetAI = async function(){
+
+  const ok =
+    confirm(
+      "정말 AI의 기억과 성장 데이터를 모두 초기화할까요?"
+    );
+
+  if(!ok) return;
+
+  ai = {
+    level:1,
+    xp:0,
+    chatCount:0,
+    memories:[],
+    messages:[]
+  };
+
+  addMessage(
+    "ai",
+    "응...? 어라... 나... 처음으로 돌아온 것 같아. 👶"
+  );
+
+  await saveAI();
+  renderAll();
+};
+
+
+/* =========================
+   ENTER KEY
+========================= */
+
+document
+  .getElementById("input")
+  .addEventListener("keydown",e=>{
+
+    if(e.key==="Enter"){
+      sendMessage();
+    }
+
+  });
+
+
+/* =========================
+   START
+========================= */
+
+loadAI();
+
+</script>
+
+</body>
+</html>
+```

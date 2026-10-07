@@ -348,6 +348,8 @@ button{
   }
 }
 </style>
+<link rel="stylesheet" href="https://semicolonxss.github.io/Formwheel/shared/formwheel-ui.css">
+<script defer src="https://semicolonxss.github.io/Formwheel/shared/formwheel-ui.js"></script>
 </head>
 
 <body>
@@ -575,9 +577,9 @@ button{
    기본 설정
 ================================================= */
 
-const AI_PATH = "formwheelAI";
+let AI_PATH = "";
 
-const LOCAL_KEY = "formwheel_ai_save_v3";
+let LOCAL_KEY = "formwheel_ai_save_v4_local";
 
 let db = null;
 let firebaseDatabase = null;
@@ -638,6 +640,9 @@ try{
   firebaseDatabase =
     firebaseDatabase;
 
+  const firebaseAuth=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js");
+  const auth=firebaseAuth.getAuth(app),user=auth.currentUser||(await firebaseAuth.signInAnonymously(auth)).user;
+  AI_PATH="formwheelAIUsers/"+user.uid;LOCAL_KEY="formwheel_ai_save_v4_"+user.uid;
   firebaseReady = true;
 
 }catch(error){
@@ -989,6 +994,18 @@ function loadLocal(){
    Firebase 저장
 ================================================= */
 
+function mergeAiState(current,incoming){
+ if(!current)return clone(incoming);
+ const result={...current,...incoming},deleted={...(current.deletedMemoryIds||{}),...(incoming.deletedMemoryIds||{})};
+ result.deletedMemoryIds=deleted;
+ const memories=new Map();for(const item of [...(current.memories||[]),...(incoming.memories||[])]){
+  if(deleted[item.id])continue;const previous=memories.get(item.id);if(!previous||Number(item.updatedAt||0)>=Number(previous.updatedAt||0))memories.set(item.id,item);
+ }result.memories=[...memories.values()].slice(-300);
+ const messages=new Map();for(const item of [...(current.messages||[]),...(incoming.messages||[])])messages.set(item.id||[item.time,item.type,item.text].join(":"),item);
+ result.messages=[...messages.values()].sort((a,b)=>a.time-b.time).slice(-150);
+ result.learnedWords=[...new Set([...(current.learnedWords||[]),...(incoming.learnedWords||[])])];result.xp=Math.max(Number(current.xp)||0,Number(incoming.xp)||0);result.chatCount=Math.max(Number(current.chatCount)||0,Number(incoming.chatCount)||0);
+ return result;
+}
 async function saveFirebase(){
 
   if(!firebaseReady || !db){
@@ -1005,10 +1022,9 @@ async function saveFirebase(){
         AI_PATH
       );
 
-    await firebaseDatabase.set(
-      ref,
-      ai
-    );
+    const pending=clone(ai);
+    const result=await firebaseDatabase.runTransaction(ref,current=>mergeAiState(current,pending),{applyLocally:false});
+    if(result.committed){ai=mergeAiState(ai,result.snapshot.val());saveLocal();}
 
     return true;
 
@@ -1248,7 +1264,7 @@ function addMessage(
   }
 
   const message = {
-
+    id:crypto.randomUUID(),
     type,
 
     text:clean,
@@ -1440,6 +1456,7 @@ function addMemory(
 ================================================= */
 
 function deleteMemory(id){
+  ai.deletedMemoryIds=ai.deletedMemoryIds||{};ai.deletedMemoryIds[id]=true;
 
   ai.memories =
     ai.memories.filter(
@@ -2887,11 +2904,14 @@ input.addEventListener(
 const memoryExport=document.createElement("button");memoryExport.textContent="기억 JSON 내보내기";memoryList.before(memoryExport);
 memoryExport.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(ai.memories,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="formwheel-memories.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const rulesNotice=document.createElement("p");rulesNotice.textContent="규칙 기반 대화입니다. 저장 기억을 인용하는 답변과 추측 답변은 다를 수 있습니다. 기억 목록에서 잘못된 내용을 수정하거나 내보낼 수 있습니다.";memoryList.before(rulesNotice);
+const localImport=document.createElement("button");localImport.textContent="이 기기의 이전 기억 가져오기";memoryList.before(localImport);
+localImport.onclick=async()=>{try{const old=JSON.parse(localStorage.getItem("formwheel_ai_save_v3")||"null");if(!old)return alert("이 기기에 이전 기억이 없습니다.");ai=mergeAiState(ai,old);normalizeAI();renderAll();await saveAI();}catch{alert("이전 기억을 불러오지 못했습니다.");}};
+const scopeNotice=document.createElement("p");scopeNotice.textContent="새 기억은 인증 UID별 경로에 저장됩니다. 기존 공용 서버 기억은 자동으로 가져오지 않습니다. 서버의 사용자별 접근 규칙 검증은 아직 필요합니다.";memoryList.before(scopeNotice);
 memoryList.addEventListener("click",async event=>{
  const button=event.target.closest("[data-edit-memory]");if(!button)return;
  const memory=ai.memories.find(m=>m.id===button.dataset.editMemory);if(!memory)return;
  const value=prompt("기억 내용을 수정하세요",memory.value);if(value===null||!value.trim())return;
- memory.value=value.trim().slice(0,2000);memory.source="사용자 수정";renderAll();await saveAI();
+ memory.value=value.trim().slice(0,2000);memory.source="사용자 수정";memory.updatedAt=Date.now();renderAll();await saveAI();
 });
 memoryList.addEventListener(
   "click",

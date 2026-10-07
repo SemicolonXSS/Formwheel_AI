@@ -2773,6 +2773,7 @@ function renderMemory(){
 
               <br>
 
+              <button data-edit-memory="${escapeHTML(memory.id)}">수정</button>
               <button
                 data-delete-memory="${escapeHTML(memory.id)}"
               >
@@ -2883,6 +2884,15 @@ input.addEventListener(
   기억 삭제
 */
 
+const memoryExport=document.createElement("button");memoryExport.textContent="기억 JSON 내보내기";memoryList.before(memoryExport);
+memoryExport.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(ai.memories,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="formwheel-memories.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+const rulesNotice=document.createElement("p");rulesNotice.textContent="규칙 기반 대화입니다. 저장 기억을 인용하는 답변과 추측 답변은 다를 수 있습니다. 기억 목록에서 잘못된 내용을 수정하거나 내보낼 수 있습니다.";memoryList.before(rulesNotice);
+memoryList.addEventListener("click",async event=>{
+ const button=event.target.closest("[data-edit-memory]");if(!button)return;
+ const memory=ai.memories.find(m=>m.id===button.dataset.editMemory);if(!memory)return;
+ const value=prompt("기억 내용을 수정하세요",memory.value);if(value===null||!value.trim())return;
+ memory.value=value.trim().slice(0,2000);memory.source="사용자 수정";renderAll();await saveAI();
+});
 memoryList.addEventListener(
   "click",
   event => {
@@ -3029,3 +3039,4 @@ input.focus();
 
 </body>
 </html>
+

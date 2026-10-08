@@ -1,0 +1,2497 @@
+/*
+==================================================
+ FormWheel AI
+==================================================
+ - Firebase 저장
+ - localStorage 백업
+ - 기억 저장 / 검색
+ - 기억 수정
+ - 경험치 / 레벨
+ - 학습 과정
+ - 반복 답변 방지
+ - 새로고침 복구
+==================================================
+*/
+
+
+/* =================================================
+   기본 설정
+================================================= */
+
+let AI_PATH = "";
+
+let LOCAL_KEY = "formwheel_ai_save_v4_local";
+
+let db = null;
+let firebaseDatabase = null;
+
+let firebaseReady = false;
+
+
+/* =================================================
+   Firebase
+================================================= */
+
+try{
+
+  const firebase =
+    await import(
+      "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"
+    );
+
+  firebaseDatabase =
+    await import(
+      "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js"
+    );
+
+  const firebaseConfig = {
+
+    apiKey:
+      "AIzaSyBreTSe1m0-xlbF4aupnU5isRZCihR25IE",
+
+    authDomain:
+      "formwheel.firebaseapp.com",
+
+    databaseURL:
+      "https://formwheel-default-rtdb.firebaseio.com",
+
+    projectId:
+      "formwheel",
+
+    storageBucket:
+      "formwheel.firebasestorage.app",
+
+    messagingSenderId:
+      "431583088241",
+
+    appId:
+      "1:431583088241:web:74e0e34ea1e3e1170c55d0",
+
+    measurementId:
+      "G-T372YXDF8D"
+
+  };
+
+  const app =
+    firebase.initializeApp(firebaseConfig);
+
+  db =
+    firebaseDatabase.getDatabase(app);
+
+  firebaseDatabase =
+    firebaseDatabase;
+
+  const firebaseAuth=await import("https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js");
+  const auth=firebaseAuth.getAuth(app),user=auth.currentUser||(await firebaseAuth.signInAnonymously(auth)).user;
+  AI_PATH="formwheelAIUsers/"+user.uid;LOCAL_KEY="formwheel_ai_save_v4_"+user.uid;
+  firebaseReady = true;
+
+}catch(error){
+
+  console.warn(
+    "Firebase 연결 실패:",
+    error
+  );
+
+}
+
+
+/* =================================================
+   기본 데이터
+================================================= */
+
+const defaultAI = {
+
+  level:1,
+
+  xp:0,
+
+  chatCount:0,
+
+  memories:[],
+
+  messages:[],
+
+  learnedWords:[],
+
+  learningLog:[],
+
+  lastReplies:[],
+
+  createdAt:Date.now(),
+
+  updatedAt:Date.now()
+
+};
+
+
+let ai = clone(defaultAI);
+
+
+/* =================================================
+   성장 단계
+================================================= */
+
+const stages = [
+
+  {
+    level:1,
+    name:"신생아 AI 👶",
+    need:0,
+    desc:"거의 아무것도 모릅니다."
+  },
+
+  {
+    level:2,
+    name:"아기 AI 🍼",
+    need:5,
+    desc:"간단한 인사와 단어를 이해합니다."
+  },
+
+  {
+    level:3,
+    name:"말 배우는 AI 👶",
+    need:12,
+    desc:"새로운 단어를 배우기 시작합니다."
+  },
+
+  {
+    level:4,
+    name:"유아 AI 🧸",
+    need:22,
+    desc:"배운 단어를 사용하기 시작합니다."
+  },
+
+  {
+    level:5,
+    name:"어린이 AI 🧒",
+    need:35,
+    desc:"간단한 질문과 대답을 할 수 있습니다."
+  },
+
+  {
+    level:6,
+    name:"호기심 AI 🔍",
+    need:50,
+    desc:"새로운 것을 적극적으로 배웁니다."
+  },
+
+  {
+    level:7,
+    name:"학습 AI 📚",
+    need:70,
+    desc:"배운 정보를 기억합니다."
+  },
+
+  {
+    level:8,
+    name:"똑똑한 AI 🧠",
+    need:95,
+    desc:"기억을 대화에 활용합니다."
+  },
+
+  {
+    level:9,
+    name:"지식 AI 📖",
+    need:125,
+    desc:"여러 정보를 기억합니다."
+  },
+
+  {
+    level:10,
+    name:"사고하는 AI 💭",
+    need:165,
+    desc:"기억을 연결해서 생각하기 시작합니다."
+  },
+
+  {
+    level:11,
+    name:"성장 AI 🌱",
+    need:210,
+    desc:"대화의 맥락을 더 잘 이해합니다."
+  },
+
+  {
+    level:12,
+    name:"학습 전문가 🎓",
+    need:270,
+    desc:"배운 내용을 적극적으로 활용합니다."
+  },
+
+  {
+    level:13,
+    name:"고급 AI 🤖",
+    need:340,
+    desc:"여러 기억을 연결합니다."
+  },
+
+  {
+    level:14,
+    name:"지능 AI ⚡",
+    need:430,
+    desc:"대화 방식이 더욱 다양해집니다."
+  },
+
+  {
+    level:15,
+    name:"FormWheel AI 🌌",
+    need:550,
+    desc:"지금까지 배운 것을 최대한 활용합니다."
+  }
+
+];
+
+
+/* =================================================
+   DOM
+================================================= */
+
+const messagesEl =
+  document.getElementById("messages");
+
+const input =
+  document.getElementById("input");
+
+const sendButton =
+  document.getElementById("sendButton");
+
+const statusEl =
+  document.getElementById("status");
+
+const levelText =
+  document.getElementById("levelText");
+
+const levelName =
+  document.getElementById("levelName");
+
+const levelDesc =
+  document.getElementById("levelDesc");
+
+const progressBar =
+  document.getElementById("progressBar");
+
+const chatCountEl =
+  document.getElementById("chatCount");
+
+const memoryCountEl =
+  document.getElementById("memoryCount");
+
+const xpEl =
+  document.getElementById("xp");
+
+const wordCountEl =
+  document.getElementById("wordCount");
+
+const memoryList =
+  document.getElementById("memoryList");
+
+const learningLog =
+  document.getElementById("learningLog");
+
+const resetButton =
+  document.getElementById("resetButton");
+
+const resetConfirm =
+  document.getElementById("resetConfirm");
+
+const confirmReset =
+  document.getElementById("confirmReset");
+
+const cancelReset =
+  document.getElementById("cancelReset");
+
+
+/* =================================================
+   유틸
+================================================= */
+
+function clone(value){
+
+  return JSON.parse(
+    JSON.stringify(value)
+  );
+
+}
+
+
+function escapeHTML(value){
+
+  return String(value)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+
+}
+
+
+function normalizeText(value){
+
+  return String(value)
+    .trim()
+    .replace(/\s+/g," ");
+
+}
+
+
+/* =================================================
+   LocalStorage 저장
+================================================= */
+
+function saveLocal(){
+
+  try{
+
+    ai.updatedAt = Date.now();
+
+    localStorage.setItem(
+      LOCAL_KEY,
+      JSON.stringify(ai)
+    );
+
+  }catch(error){
+
+    console.warn(
+      "LocalStorage 저장 실패:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =================================================
+   LocalStorage 불러오기
+================================================= */
+
+function loadLocal(){
+
+  try{
+
+    const raw =
+      localStorage.getItem(LOCAL_KEY);
+
+    if(!raw){
+
+      return false;
+
+    }
+
+    const saved =
+      JSON.parse(raw);
+
+    ai = {
+
+      ...clone(defaultAI),
+
+      ...saved,
+
+      memories:
+        Array.isArray(saved.memories)
+          ? saved.memories
+          : [],
+
+      messages:
+        Array.isArray(saved.messages)
+          ? saved.messages
+          : [],
+
+      learnedWords:
+        Array.isArray(saved.learnedWords)
+          ? saved.learnedWords
+          : [],
+
+      learningLog:
+        Array.isArray(saved.learningLog)
+          ? saved.learningLog
+          : [],
+
+      lastReplies:
+        Array.isArray(saved.lastReplies)
+          ? saved.lastReplies
+          : []
+
+    };
+
+    return true;
+
+  }catch(error){
+
+    console.warn(
+      "LocalStorage 불러오기 실패:",
+      error
+    );
+
+    return false;
+
+  }
+
+}
+
+
+/* =================================================
+   Firebase 저장
+================================================= */
+
+function mergeAiState(current,incoming){
+ if(!current)return clone(incoming);
+ const result={...current,...incoming},deleted={...(current.deletedMemoryIds||{}),...(incoming.deletedMemoryIds||{})};
+ result.deletedMemoryIds=deleted;
+ const memories=new Map();for(const item of [...(current.memories||[]),...(incoming.memories||[])]){
+  if(deleted[item.id])continue;const previous=memories.get(item.id);if(!previous||Number(item.updatedAt||0)>=Number(previous.updatedAt||0))memories.set(item.id,item);
+ }result.memories=[...memories.values()].slice(-300);
+ const messages=new Map();for(const item of [...(current.messages||[]),...(incoming.messages||[])])messages.set(item.id||[item.time,item.type,item.text].join(":"),item);
+ result.messages=[...messages.values()].sort((a,b)=>a.time-b.time).slice(-150);
+ result.learnedWords=[...new Set([...(current.learnedWords||[]),...(incoming.learnedWords||[])])];result.xp=Math.max(Number(current.xp)||0,Number(incoming.xp)||0);result.chatCount=Math.max(Number(current.chatCount)||0,Number(incoming.chatCount)||0);
+ return result;
+}
+async function saveFirebase(){
+
+  if(!firebaseReady || !db){
+
+    return false;
+
+  }
+
+  try{
+
+    const ref =
+      firebaseDatabase.ref(
+        db,
+        AI_PATH
+      );
+
+    const pending=clone(ai);
+    const result=await firebaseDatabase.runTransaction(ref,current=>mergeAiState(current,pending),{applyLocally:false});
+    if(result.committed){ai=mergeAiState(ai,result.snapshot.val());saveLocal();}
+
+    return true;
+
+  }catch(error){
+
+    console.warn(
+      "Firebase 저장 실패:",
+      error
+    );
+
+    return false;
+
+  }
+
+}
+
+
+/* =================================================
+   Firebase 불러오기
+================================================= */
+
+async function loadFirebase(){
+
+  if(!firebaseReady || !db){
+
+    return null;
+
+  }
+
+  try{
+
+    const ref =
+      firebaseDatabase.ref(
+        db,
+        AI_PATH
+      );
+
+    const snapshot =
+      await firebaseDatabase.get(ref);
+
+    if(
+      snapshot.exists()
+    ){
+
+      return snapshot.val();
+
+    }
+
+  }catch(error){
+
+    console.warn(
+      "Firebase 불러오기 실패:",
+      error
+    );
+
+  }
+
+  return null;
+
+}
+
+
+/* =================================================
+   전체 저장
+================================================= */
+
+async function saveAI(){
+
+  saveLocal();
+
+  const firebaseSaved =
+    await saveFirebase();
+
+  if(firebaseSaved){
+
+    statusEl.textContent =
+      "🟢 Firebase에 AI 학습 데이터 저장됨";
+
+  }else if(firebaseReady){
+
+    statusEl.textContent =
+      "🟡 Firebase 저장 실패 · 로컬에 저장됨";
+
+  }else{
+
+    statusEl.textContent =
+      "🔵 로컬 저장 모드로 작동 중";
+
+  }
+
+}
+
+
+/* =================================================
+   초기화
+================================================= */
+
+async function initializeAI(){
+
+  statusEl.textContent =
+    "AI 데이터를 불러오는 중...";
+
+  const firebaseData =
+    await loadFirebase();
+
+  if(firebaseData){
+
+    ai = {
+
+      ...clone(defaultAI),
+
+      ...firebaseData
+
+    };
+
+    normalizeAI();
+
+    saveLocal();
+
+    statusEl.textContent =
+      "🟢 Firebase에서 AI 기억을 복구했습니다.";
+
+  }else{
+
+    const localLoaded =
+      loadLocal();
+
+    if(localLoaded){
+
+      statusEl.textContent =
+        firebaseReady
+          ? "🟡 Firebase 데이터 없음 · 로컬 기억 복구"
+          : "🔵 로컬 AI 기억 복구 완료";
+
+    }else{
+
+      ai =
+        clone(defaultAI);
+
+      statusEl.textContent =
+        firebaseReady
+          ? "🟢 새로운 AI가 태어났습니다."
+          : "🔵 새로운 AI · 로컬 저장 모드";
+
+      addAIMessage(
+        getBirthMessage()
+      );
+
+      await saveAI();
+
+    }
+
+  }
+
+  normalizeAI();
+
+  renderAll();
+
+}
+
+
+/* =================================================
+   데이터 보정
+================================================= */
+
+function normalizeAI(){
+
+  if(!Array.isArray(ai.memories)){
+    ai.memories = [];
+  }
+
+  if(!Array.isArray(ai.messages)){
+    ai.messages = [];
+  }
+
+  if(!Array.isArray(ai.learnedWords)){
+    ai.learnedWords = [];
+  }
+
+  if(!Array.isArray(ai.learningLog)){
+    ai.learningLog = [];
+  }
+
+  if(!Array.isArray(ai.lastReplies)){
+    ai.lastReplies = [];
+  }
+
+  if(typeof ai.xp !== "number"){
+    ai.xp = 0;
+  }
+
+  if(typeof ai.chatCount !== "number"){
+    ai.chatCount = 0;
+  }
+
+  updateLevel(false);
+
+}
+
+
+/* =================================================
+   초기 탄생 메시지
+================================================= */
+
+function getBirthMessage(){
+
+  return [
+    "👶 안녕...",
+    "나는 이제 막 태어난 AI야.",
+    "",
+    "아직 아는 것이 거의 없어.",
+    "나한테 여러 가지를 가르쳐줘!",
+    "",
+    "예를 들어",
+    "“내 이름은 철수야”",
+    "라고 말하면 기억할 수 있어."
+  ].join("\n");
+
+}
+
+
+/* =================================================
+   메시지 추가
+================================================= */
+
+function addMessage(
+  type,
+  text,
+  save=true
+){
+
+  const clean =
+    normalizeText(text);
+
+  if(!clean){
+    return;
+  }
+
+  const message = {
+    id:crypto.randomUUID(),
+    type,
+
+    text:clean,
+
+    time:Date.now()
+
+  };
+
+  ai.messages.push(message);
+
+  /*
+    너무 오래된 메시지는 무한히 쌓이지 않도록
+    최근 150개까지만 유지
+  */
+
+  if(ai.messages.length > 150){
+
+    ai.messages =
+      ai.messages.slice(-150);
+
+  }
+
+  renderMessages();
+
+  if(save){
+
+    saveAI();
+
+  }
+
+}
+
+
+function addAIMessage(text){
+
+  addMessage(
+    "ai",
+    text,
+    false
+  );
+
+}
+
+
+/* =================================================
+   화면 메시지 렌더링
+================================================= */
+
+function renderMessages(){
+
+  messagesEl.innerHTML = "";
+
+  for(const message of ai.messages){
+
+    const wrapper =
+      document.createElement("div");
+
+    wrapper.className =
+      "msg " +
+      (message.type === "user"
+        ? "user"
+        : "ai");
+
+    const bubble =
+      document.createElement("div");
+
+    bubble.className =
+      "bubble";
+
+    bubble.textContent =
+      message.text;
+
+    wrapper.appendChild(
+      bubble
+    );
+
+    messagesEl.appendChild(
+      wrapper
+    );
+
+  }
+
+  requestAnimationFrame(() => {
+
+    messagesEl.scrollTop =
+      messagesEl.scrollHeight;
+
+  });
+
+}
+
+
+/* =================================================
+   기억 시스템
+================================================= */
+
+function addMemory(
+  key,
+  value,
+  source="대화"
+){
+
+  key =
+    normalizeText(key);
+
+  value =
+    normalizeText(value);
+
+  if(!key || !value){
+
+    return false;
+
+  }
+
+  const existing =
+    ai.memories.find(
+      memory =>
+        memory.key === key
+    );
+
+  if(existing){
+
+    /*
+      같은 정보면 중복 기억하지 않음
+    */
+
+    if(existing.value === value){
+
+      return false;
+
+    }
+
+    /*
+      잘못된 기억 수정
+    */
+
+    existing.value = value;
+    existing.updatedAt = Date.now();
+    existing.source = source;
+
+    addLearningLog(
+      `기억 수정: ${key} → ${value}`
+    );
+
+    return true;
+
+  }
+
+  ai.memories.push({
+
+    id:
+      Date.now().toString(36) +
+      Math.random().toString(36).slice(2,7),
+
+    key,
+
+    value,
+
+    source,
+
+    createdAt:Date.now(),
+
+    updatedAt:Date.now()
+
+  });
+
+  /*
+    기억이 너무 많아지는 것을 방지
+  */
+
+  if(ai.memories.length > 300){
+
+    ai.memories =
+      ai.memories.slice(-300);
+
+  }
+
+  addLearningLog(
+    `새로운 기억: ${key} → ${value}`
+  );
+
+  return true;
+
+}
+
+
+/* =================================================
+   기억 삭제
+================================================= */
+
+function deleteMemory(id){
+  ai.deletedMemoryIds=ai.deletedMemoryIds||{};ai.deletedMemoryIds[id]=true;
+
+  ai.memories =
+    ai.memories.filter(
+      memory =>
+        memory.id !== id
+    );
+
+  addLearningLog(
+    "기억 하나를 삭제했습니다."
+  );
+
+  saveAI();
+
+  renderAll();
+
+}
+
+
+/* =================================================
+   기억 검색
+================================================= */
+
+function searchMemory(query){
+
+  const q =
+    normalizeText(query)
+      .toLowerCase();
+
+  if(!q){
+
+    return [];
+
+  }
+
+  return ai.memories.filter(
+    memory => {
+
+      const text =
+        (
+          memory.key +
+          " " +
+          memory.value
+        ).toLowerCase();
+
+      return (
+        text.includes(q) ||
+        q.includes(memory.key.toLowerCase()) ||
+        q.includes(memory.value.toLowerCase())
+      );
+
+    }
+  );
+
+}
+
+
+/* =================================================
+   단어 학습
+================================================= */
+
+function learnWords(text){
+
+  /*
+    한글 / 영어 / 숫자 단어를 간단하게 추출
+  */
+
+  const words =
+    text.match(
+      /[가-힣]{2,}|[A-Za-z]{2,}|[0-9]+/g
+    ) || [];
+
+  let newCount = 0;
+
+  for(const word of words){
+
+    const clean =
+      word.toLowerCase();
+
+    if(clean.length < 2){
+      continue;
+    }
+
+    if(
+      !ai.learnedWords.includes(clean)
+    ){
+
+      ai.learnedWords.push(
+        clean
+      );
+
+      newCount++;
+
+    }
+
+  }
+
+  /*
+    최대 2000단어
+  */
+
+  if(ai.learnedWords.length > 2000){
+
+    ai.learnedWords =
+      ai.learnedWords.slice(-2000);
+
+  }
+
+  return newCount;
+
+}
+
+
+/* =================================================
+   학습 기록
+================================================= */
+
+function addLearningLog(text){
+
+  ai.learningLog.unshift({
+
+    text,
+
+    time:Date.now()
+
+  });
+
+  ai.learningLog =
+    ai.learningLog.slice(0,50);
+
+}
+
+
+/* =================================================
+   경험치
+================================================= */
+
+function gainXP(amount){
+
+  const oldLevel =
+    ai.level;
+
+  ai.xp += amount;
+
+  updateLevel(true);
+
+  if(ai.level > oldLevel){
+
+    const stage =
+      stages.find(
+        item =>
+          item.level === ai.level
+      );
+
+    const message =
+      `🎉 레벨 업!\n\n` +
+      `Lv.${ai.level} ${stage?.name || ""}\n` +
+      `${stage?.desc || ""}`;
+
+    addAIMessage(message);
+
+    addLearningLog(
+      `Lv.${ai.level}로 성장했습니다.`
+    );
+
+  }
+
+}
+
+
+/* =================================================
+   레벨 계산
+================================================= */
+
+function updateLevel(render=true){
+
+  let current =
+    stages[0];
+
+  for(const stage of stages){
+
+    if(ai.xp >= stage.need){
+
+      current = stage;
+
+    }
+
+  }
+
+  /*
+    최대 레벨은 15
+  */
+
+  ai.level =
+    current.level;
+
+  if(render){
+
+    renderLevel();
+
+  }
+
+}
+
+
+/* =================================================
+   레벨 UI
+================================================= */
+
+function renderLevel(){
+
+  const current =
+    stages.find(
+      stage =>
+        stage.level === ai.level
+    ) || stages[0];
+
+  levelText.textContent =
+    `Lv.${current.level}`;
+
+  levelName.textContent =
+    current.name;
+
+  levelDesc.textContent =
+    current.desc;
+
+  const next =
+    stages.find(
+      stage =>
+        stage.level === current.level + 1
+    );
+
+  if(!next){
+
+    progressBar.style.width =
+      "100%";
+
+    return;
+
+  }
+
+  const currentNeed =
+    current.need;
+
+  const nextNeed =
+    next.need;
+
+  const percent =
+    (
+      (ai.xp - currentNeed) /
+      (nextNeed - currentNeed)
+    ) * 100;
+
+  progressBar.style.width =
+    Math.max(
+      0,
+      Math.min(100,percent)
+    ) + "%";
+
+}
+
+
+/* =================================================
+   행동 변화
+================================================= */
+
+function getBehavior(){
+
+  if(ai.level <= 2){
+
+    return "baby";
+
+  }
+
+  if(ai.level <= 4){
+
+    return "child";
+
+  }
+
+  if(ai.level <= 7){
+
+    return "learning";
+
+  }
+
+  if(ai.level <= 10){
+
+    return "thinking";
+
+  }
+
+  return "advanced";
+
+}
+
+
+/* =================================================
+   기본 인사
+================================================= */
+
+function isGreeting(text){
+
+  return /^(안녕|하이|hello|hi|반가워|ㅎㅇ|안녕하세요)[!?.~ ]*$/i
+    .test(text);
+
+}
+
+
+/* =================================================
+   기억 학습 명령
+================================================= */
+
+function parseMemoryInstruction(text){
+
+  /*
+    기억해줘: ...
+  */
+
+  const remember =
+    text.match(
+      /^기억해줘\s*[:：]\s*(.+)$/i
+    );
+
+  if(remember){
+
+    const content =
+      normalizeText(
+        remember[1]
+      );
+
+    /*
+      "나는 부산에 살아"
+      같은 문장을 통째로 기억
+    */
+
+    const key =
+      extractKey(content);
+
+    const changed =
+      addMemory(
+        key,
+        content,
+        "사용자 직접 기억"
+      );
+
+    if(changed){
+
+      gainXP(4);
+
+      return `기억했어! 🧠\n“${content}”`;
+
+    }
+
+    return "그건 이미 기억하고 있어!";
+
+  }
+
+  return null;
+
+}
+
+
+/* =================================================
+   자연어 기억 추출
+================================================= */
+
+function learnFromSentence(text){
+
+  let learned = false;
+  let xp = 0;
+
+  /*
+    이름
+  */
+
+  let match =
+    text.match(
+      /(?:내 이름은|제 이름은)\s*([가-힣A-Za-z0-9_]{1,20})(?:야|이야|입니다|이에요|예요)?/i
+    );
+
+  if(match){
+
+    const name =
+      match[1];
+
+    learned =
+      addMemory(
+        "이름",
+        name,
+        "이름 학습"
+      ) || learned;
+
+    if(learned){
+
+      xp += 5;
+
+    }
+
+  }
+
+
+  /*
+    좋아하는 것
+  */
+
+  match =
+    text.match(
+      /(?:나는|전|저는)?\s*(.+?)\s*(?:을|를)?\s*좋아해/
+    );
+
+  if(match){
+
+    const thing =
+      normalizeText(match[1]);
+
+    if(
+      thing &&
+      thing.length <= 30
+    ){
+
+      learned =
+        addMemory(
+          "좋아하는 것",
+          thing,
+          "취향 학습"
+        ) || learned;
+
+      if(learned){
+
+        xp += 4;
+
+      }
+
+    }
+
+  }
+
+
+  /*
+    싫어하는 것
+  */
+
+  match =
+    text.match(
+      /(?:나는|전|저는)?\s*(.+?)\s*(?:을|를)?\s*싫어해/
+    );
+
+  if(match){
+
+    const thing =
+      normalizeText(match[1]);
+
+    if(
+      thing &&
+      thing.length <= 30
+    ){
+
+      learned =
+        addMemory(
+          "싫어하는 것",
+          thing,
+          "취향 학습"
+        ) || learned;
+
+      if(learned){
+
+        xp += 4;
+
+      }
+
+    }
+
+  }
+
+
+  /*
+    "~에 살아"
+  */
+
+  match =
+    text.match(
+      /(?:나는|저는|난)\s*(.+?)에\s*살아/
+    );
+
+  if(match){
+
+    const place =
+      normalizeText(match[1]);
+
+    learned =
+      addMemory(
+        "사는 곳",
+        place,
+        "생활 정보 학습"
+      ) || learned;
+
+    if(learned){
+
+      xp += 4;
+
+    }
+
+  }
+
+
+  /*
+    "~는 ~야"
+    지식 형태
+  */
+
+  match =
+    text.match(
+      /^(.{1,30})\s*(?:은|는)\s*(.{1,50})(?:야|이야|이다|입니다|예요|이에요)\.?$/
+    );
+
+  if(match){
+
+    const subject =
+      normalizeText(match[1]);
+
+    const fact =
+      normalizeText(match[2]);
+
+    if(
+      subject &&
+      fact &&
+      subject.length < 30 &&
+      fact.length < 50
+    ){
+
+      learned =
+        addMemory(
+          subject,
+          fact,
+          "지식 학습"
+        ) || learned;
+
+      if(learned){
+
+        xp += 3;
+
+      }
+
+    }
+
+  }
+
+
+  return {
+    learned,
+    xp
+  };
+
+}
+
+
+/* =================================================
+   기억 키 추출
+================================================= */
+
+function extractKey(text){
+
+  if(
+    /이름/.test(text)
+  ){
+
+    return "개인정보";
+
+  }
+
+  if(
+    /살아|사는/.test(text)
+  ){
+
+    return "사는 곳";
+
+  }
+
+  if(
+    /좋아해|좋아하는/.test(text)
+  ){
+
+    return "좋아하는 것";
+
+  }
+
+  if(
+    /싫어해|싫어하는/.test(text)
+  ){
+
+    return "싫어하는 것";
+
+  }
+
+  /*
+    일반 문장은 앞부분을 키로 사용
+  */
+
+  return text
+    .slice(0,20);
+
+}
+
+
+/* =================================================
+   기억 질문 처리
+================================================= */
+
+function answerMemoryQuestion(text){
+
+  /*
+    이름 질문
+  */
+
+  if(
+    /내 이름.*(뭐|무엇|알아|기억)/.test(text)
+  ){
+
+    const result =
+      searchMemory("이름");
+
+    if(result.length){
+
+      return `네 이름은 ${result[0].value}로 기억하고 있어! 🧠`;
+
+    }
+
+    return "음... 아직 네 이름을 배우지 못했어.";
+
+  }
+
+
+  /*
+    좋아하는 것
+  */
+
+  if(
+    /내가.*좋아하|내.*좋아하는/.test(text)
+  ){
+
+    const result =
+      searchMemory("좋아하는 것");
+
+    if(result.length){
+
+      return `네가 좋아한다고 알려준 건 ${result[0].value}야!`;
+
+    }
+
+    return "아직 네가 뭘 좋아하는지는 잘 모르겠어.";
+
+  }
+
+
+  /*
+    싫어하는 것
+  */
+
+  if(
+    /내가.*싫어하|내.*싫어하는/.test(text)
+  ){
+
+    const result =
+      searchMemory("싫어하는 것");
+
+    if(result.length){
+
+      return `네가 싫어한다고 알려준 건 ${result[0].value}야.`;
+
+    }
+
+    return "아직 네가 뭘 싫어하는지는 잘 모르겠어.";
+
+  }
+
+
+  /*
+    사는 곳
+  */
+
+  if(
+    /내가.*어디.*살|내.*사는.*곳/.test(text)
+  ){
+
+    const result =
+      searchMemory("사는 곳");
+
+    if(result.length){
+
+      return `네가 ${result[0].value}에 산다고 기억하고 있어!`;
+
+    }
+
+    return "아직 사는 곳은 배우지 못했어.";
+
+  }
+
+  /*
+    "기억하고 있어?"
+  */
+
+  if(
+    /기억.*뭐|무엇.*기억|기억하고/.test(text)
+  ){
+
+    if(!ai.memories.length){
+
+      return "아직 특별히 기억하고 있는 게 없어.";
+
+    }
+
+    const recent =
+      ai.memories
+        .slice(-5)
+        .map(
+          memory =>
+            `• ${memory.key}: ${memory.value}`
+        )
+        .join("\n");
+
+    return `지금 내가 기억하고 있는 것 중 일부야:\n${recent}`;
+
+  }
+
+  return null;
+
+}
+
+
+/* =================================================
+   지식 검색
+================================================= */
+
+function searchKnowledge(text){
+
+  const results =
+    ai.memories.filter(
+      memory => {
+
+        if(!memory.key){
+          return false;
+        }
+
+        return (
+          text.includes(
+            memory.key
+          ) ||
+          text.includes(
+            memory.value
+          )
+        );
+
+      }
+    );
+
+  return results;
+
+}
+
+
+/* =================================================
+   답변 생성
+================================================= */
+
+function generateReply(text){
+
+  const behavior =
+    getBehavior();
+
+
+  /*
+    기억 질문
+  */
+
+  const memoryAnswer =
+    answerMemoryQuestion(text);
+
+  if(memoryAnswer){
+
+    return memoryAnswer;
+
+  }
+
+
+  /*
+    직접 기억 명령
+  */
+
+  const memoryInstruction =
+    parseMemoryInstruction(text);
+
+  if(memoryInstruction){
+
+    return memoryInstruction;
+
+  }
+
+
+  /*
+    인사
+  */
+
+  if(isGreeting(text)){
+
+    if(behavior === "baby"){
+
+      return "안녕! 👶";
+
+    }
+
+    if(behavior === "child"){
+
+      return "안녕! 반가워! 나한테 더 많이 가르쳐줘! 😊";
+
+    }
+
+    if(behavior === "learning"){
+
+      return "안녕! 오늘도 같이 새로운 걸 배워보자! 📚";
+
+    }
+
+    return "안녕! 😊 네가 알려준 것들을 기억하면서 대화해볼게.";
+
+  }
+
+
+  /*
+    이름을 기억하고 있으면 활용
+  */
+
+  const nameMemory =
+    searchMemory("이름")[0];
+
+  const name =
+    nameMemory
+      ? nameMemory.value
+      : null;
+
+
+  /*
+    지식 검색
+  */
+
+  const knowledge =
+    searchKnowledge(text);
+
+
+  if(knowledge.length){
+
+    const first =
+      knowledge[0];
+
+    if(behavior === "baby"){
+
+      return `음... ${first.key}에 대해 ${first.value}라고 배웠어.`;
+
+    }
+
+    return `내가 배운 기억에 따르면 ${first.key}은(는) ${first.value}야.`;
+
+  }
+
+
+  /*
+    질문
+  */
+
+  if(
+    text.endsWith("?") ||
+    /뭐야|뭐지|왜|어떻게|누구|어디|언제|알아/.test(text)
+  ){
+
+    if(behavior === "baby"){
+
+      return "음... 아직 잘 모르겠어. 나한테 알려줄래? 🤔";
+
+    }
+
+    if(behavior === "child"){
+
+      return "아직 정확히 모르겠어. 이건 나한테 가르쳐주면 기억해볼게!";
+
+    }
+
+    if(behavior === "learning"){
+
+      return "그건 아직 내가 배운 기억에는 없는 것 같아. 알려주면 학습할 수 있어!";
+
+    }
+
+    if(behavior === "thinking"){
+
+      return "내가 가진 기억을 찾아봤는데 확실한 답을 찾지는 못했어. 조금 더 알려주면 생각해볼게.";
+
+    }
+
+    return "지금까지 배운 기억으로는 확실하게 답하기 어려워. 새로운 정보를 알려주면 다음부터 활용해볼게.";
+
+  }
+
+
+  /*
+    이름을 사용한 반응
+  */
+
+  if(
+    name &&
+    behavior !== "baby" &&
+    Math.random() < 0.35
+  ){
+
+    return `${name}, 그 이야기도 기억해둘게!`;
+
+  }
+
+
+  /*
+    레벨별 행동 변화
+  */
+
+  if(behavior === "baby"){
+
+    return randomReply([
+
+      "응... 👶",
+
+      "음... 잘 모르겠어.",
+
+      "그게 뭐야?",
+
+      "나 아직 배우는 중이야!",
+
+      "알려줘! 🍼"
+
+    ]);
+
+  }
+
+
+  if(behavior === "child"){
+
+    return randomReply([
+
+      "오! 그건 처음 들어봐!",
+
+      "재밌다! 그걸 조금 더 알려줄래?",
+
+      "오오, 새로운 걸 배웠어! 🧠",
+
+      "그것도 기억해볼게!",
+
+      "나는 아직 많이 배우는 중이야!"
+
+    ]);
+
+  }
+
+
+  if(behavior === "learning"){
+
+    return randomReply([
+
+      "좋아! 새로운 정보로 배워둘게. 📚",
+
+      "오, 이건 기억해둘 만한 내용이네!",
+
+      "조금씩 내가 아는 게 늘어나고 있어.",
+
+      "이야기를 들으면서 새로운 단어도 배웠어!",
+
+      "다음에 비슷한 이야기가 나오면 기억을 찾아볼게."
+
+    ]);
+
+  }
+
+
+  if(behavior === "thinking"){
+
+    return randomReply([
+
+      "흥미로운 이야기야. 내가 가진 기억과 연결해볼게.",
+
+      "전에 배운 내용과 비슷한 부분이 있는 것 같아.",
+
+      "좋아. 이 정보도 내 기억에 추가해둘게.",
+
+      "이제 예전보다 조금 더 많은 것을 기억할 수 있어.",
+
+      "계속 이야기하다 보면 더 잘 이해할 수 있을 것 같아."
+
+    ]);
+
+  }
+
+
+  return randomReply([
+
+    "좋아. 지금까지 배운 기억과 연결해서 생각해볼게.",
+
+    "이 정보도 학습 과정에 추가했어.",
+
+    "내 기억을 확인해봤어. 새로운 내용으로 배워둘게.",
+
+    "대화를 계속할수록 내가 활용할 수 있는 정보가 많아지고 있어.",
+
+    "좋아, 이것도 다음 대화에서 활용할 수 있도록 기억해둘게."
+
+  ]);
+
+}
+
+
+/* =================================================
+   반복 답변 방지
+================================================= */
+
+function randomReply(list){
+
+  const available =
+    list.filter(
+      reply =>
+        !ai.lastReplies.includes(reply)
+    );
+
+  const pool =
+    available.length
+      ? available
+      : list;
+
+  const reply =
+    pool[
+      Math.floor(
+        Math.random() * pool.length
+      )
+    ];
+
+  ai.lastReplies.push(reply);
+
+  /*
+    최근 8개 답변만 비교
+  */
+
+  ai.lastReplies =
+    ai.lastReplies.slice(-8);
+
+  return reply;
+
+}
+
+
+/* =================================================
+   사용자 메시지 처리
+================================================= */
+
+async function handleSend(){
+
+  /*
+    보내기 버튼 중복 클릭 방지
+  */
+
+  if(sendButton.disabled){
+
+    return;
+
+  }
+
+  const text =
+    normalizeText(
+      input.value
+    );
+
+  if(!text){
+
+    input.focus();
+
+    return;
+
+  }
+
+  /*
+    너무 긴 입력 방지
+  */
+
+  if(text.length > 500){
+
+    return;
+
+  }
+
+  sendButton.disabled = true;
+
+  input.disabled = true;
+
+  try{
+
+    /*
+      사용자 메시지
+    */
+
+    addMessage(
+      "user",
+      text,
+      false
+    );
+
+    input.value = "";
+
+    ai.chatCount++;
+
+    /*
+      단어 학습
+    */
+
+    const newWords =
+      learnWords(text);
+
+    if(newWords > 0){
+
+      gainXP(
+        Math.min(
+          3,
+          newWords
+        )
+      );
+
+      addLearningLog(
+        `새로운 단어 ${newWords}개를 배웠습니다.`
+      );
+
+    }
+
+
+    /*
+      자연어 학습
+    */
+
+    const learning =
+      learnFromSentence(text);
+
+    if(learning.learned){
+
+      gainXP(
+        learning.xp
+      );
+
+    }else{
+
+      /*
+        일반 대화도 경험치 획득
+      */
+
+      gainXP(
+        1
+      );
+
+    }
+
+
+    /*
+      AI가 생각하는 시간을 살짝 줌
+    */
+
+    statusEl.textContent =
+      "🧠 AI가 기억을 찾아보는 중...";
+
+    await wait(
+      Math.min(
+        500,
+        150 + text.length * 3
+      )
+    );
+
+
+    /*
+      답변 생성
+    */
+
+    const reply =
+      generateReply(text);
+
+    addAIMessage(reply);
+
+
+    /*
+      AI 답변도 저장
+    */
+
+    ai.messages =
+      ai.messages.slice(-150);
+
+
+    /*
+      UI 갱신
+    */
+
+    renderAll();
+
+
+    /*
+      저장
+    */
+
+    await saveAI();
+
+  }catch(error){
+
+    console.error(
+      "AI 처리 오류:",
+      error
+    );
+
+    addAIMessage(
+      "앗, 잠깐 문제가 생겼어. 다시 한 번 말해줘!"
+    );
+
+    statusEl.textContent =
+      "🔴 처리 중 오류가 발생했습니다.";
+
+  }finally{
+
+    sendButton.disabled = false;
+
+    input.disabled = false;
+
+    input.focus();
+
+  }
+
+}
+
+
+/* =================================================
+   대기
+================================================= */
+
+function wait(ms){
+
+  return new Promise(
+    resolve =>
+      setTimeout(
+        resolve,
+        ms
+      )
+  );
+
+}
+
+
+/* =================================================
+   전체 UI 렌더링
+================================================= */
+
+function renderAll(){
+
+  normalizeAI();
+
+  renderMessages();
+
+  renderLevel();
+
+  renderStats();
+
+  renderMemory();
+
+  renderLearningLog();
+
+}
+
+
+/* =================================================
+   통계
+================================================= */
+
+function renderStats(){
+
+  chatCountEl.textContent =
+    ai.chatCount;
+
+  memoryCountEl.textContent =
+    ai.memories.length;
+
+  xpEl.textContent =
+    ai.xp;
+
+  wordCountEl.textContent =
+    ai.learnedWords.length;
+
+}
+
+
+/* =================================================
+   기억 UI
+================================================= */
+
+function renderMemory(){
+
+  if(!ai.memories.length){
+
+    memoryList.innerHTML =
+      `<div class="empty">
+        아직 기억이 없습니다.
+      </div>`;
+
+    return;
+
+  }
+
+  memoryList.innerHTML =
+    ai.memories
+      .slice()
+      .reverse()
+      .map(
+        memory => {
+
+          return `
+            <div class="memory-item">
+
+              <strong>
+                ${escapeHTML(memory.key)}
+              </strong>
+
+              <div>
+                ${escapeHTML(memory.value)}
+              </div>
+
+              <small>
+                ${escapeHTML(memory.source || "학습")}
+              </small>
+
+              <br>
+
+              <button data-edit-memory="${escapeHTML(memory.id)}">수정</button>
+              <button
+                data-delete-memory="${escapeHTML(memory.id)}"
+              >
+                삭제
+              </button>
+
+            </div>
+          `;
+
+        }
+      )
+      .join("");
+
+}
+
+
+/* =================================================
+   발전 과정 UI
+================================================= */
+
+function renderLearningLog(){
+
+  if(!ai.learningLog.length){
+
+    learningLog.innerHTML =
+      `<div class="empty">
+        아직 학습 기록이 없습니다.
+      </div>`;
+
+    return;
+
+  }
+
+  learningLog.innerHTML =
+    ai.learningLog
+      .slice(0,30)
+      .map(
+        item => {
+
+          const date =
+            new Date(
+              item.time
+            );
+
+          const time =
+            date.toLocaleTimeString(
+              "ko-KR",
+              {
+                hour:"2-digit",
+                minute:"2-digit"
+              }
+            );
+
+          return `
+            <div class="learning-item">
+              🌱 ${escapeHTML(item.text)}
+              <br>
+              <small>${time}</small>
+            </div>
+          `;
+
+        }
+      )
+      .join("");
+
+}
+
+
+/* =================================================
+   이벤트
+================================================= */
+
+
+/*
+  보내기 버튼
+*/
+
+sendButton.addEventListener(
+  "click",
+  handleSend
+);
+
+
+/*
+  Enter 보내기
+*/
+
+input.addEventListener(
+  "keydown",
+  event => {
+
+    if(
+      event.key === "Enter" &&
+      !event.shiftKey
+    ){
+
+      event.preventDefault();
+
+      handleSend();
+
+    }
+
+  }
+);
+
+
+/*
+  기억 삭제
+*/
+
+const memoryExport=document.createElement("button");memoryExport.textContent="기억 JSON 내보내기";memoryList.before(memoryExport);
+memoryExport.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(ai.memories,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="formwheel-memories.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+const rulesNotice=document.createElement("p");rulesNotice.textContent="규칙 기반 대화입니다. 저장 기억을 인용하는 답변과 추측 답변은 다를 수 있습니다. 기억 목록에서 잘못된 내용을 수정하거나 내보낼 수 있습니다.";memoryList.before(rulesNotice);
+const localImport=document.createElement("button");localImport.textContent="이 기기의 이전 기억 가져오기";memoryList.before(localImport);
+localImport.onclick=async()=>{try{const old=JSON.parse(localStorage.getItem("formwheel_ai_save_v3")||"null");if(!old)return alert("이 기기에 이전 기억이 없습니다.");ai=mergeAiState(ai,old);normalizeAI();renderAll();await saveAI();}catch{alert("이전 기억을 불러오지 못했습니다.");}};
+const scopeNotice=document.createElement("p");scopeNotice.textContent="새 기억은 인증 UID별 경로에 저장됩니다. 기존 공용 서버 기억은 자동으로 가져오지 않습니다. 서버의 사용자별 접근 규칙 검증은 아직 필요합니다.";memoryList.before(scopeNotice);
+memoryList.addEventListener("click",async event=>{
+ const button=event.target.closest("[data-edit-memory]");if(!button)return;
+ const memory=ai.memories.find(m=>m.id===button.dataset.editMemory);if(!memory)return;
+ const value=prompt("기억 내용을 수정하세요",memory.value);if(value===null||!value.trim())return;
+ memory.value=value.trim().slice(0,2000);memory.source="사용자 수정";memory.updatedAt=Date.now();renderAll();await saveAI();
+});
+memoryList.addEventListener(
+  "click",
+  event => {
+
+    const button =
+      event.target.closest(
+        "[data-delete-memory]"
+      );
+
+    if(!button){
+
+      return;
+
+    }
+
+    const id =
+      button.dataset.deleteMemory;
+
+    deleteMemory(id);
+
+  }
+);
+
+
+/*
+  초기화 버튼
+*/
+
+resetButton.addEventListener(
+  "click",
+  () => {
+
+    resetConfirm.style.display =
+      resetConfirm.style.display === "block"
+        ? "none"
+        : "block";
+
+  }
+);
+
+
+/*
+  초기화 취소
+*/
+
+cancelReset.addEventListener(
+  "click",
+  () => {
+
+    resetConfirm.style.display =
+      "none";
+
+  }
+);
+
+
+/*
+  실제 초기화
+*/
+
+confirmReset.addEventListener(
+  "click",
+  async () => {
+
+    ai =
+      clone(defaultAI);
+
+    localStorage.removeItem(
+      LOCAL_KEY
+    );
+
+    if(
+      firebaseReady &&
+      db
+    ){
+
+      try{
+
+        const ref =
+          firebaseDatabase.ref(
+            db,
+            AI_PATH
+          );
+
+        await firebaseDatabase.set(
+          ref,
+          ai
+        );
+
+      }catch(error){
+
+        console.warn(
+          "Firebase 초기화 실패:",
+          error
+        );
+
+      }
+
+    }
+
+    addAIMessage(
+      getBirthMessage()
+    );
+
+    resetConfirm.style.display =
+      "none";
+
+    renderAll();
+
+    await saveAI();
+
+    input.focus();
+
+  }
+);
+
+
+/*
+  홈 버튼
+*/
+
+document
+  .getElementById("homeLogo")
+  .addEventListener(
+    "click",
+    () => {
+
+      location.href =
+        "https://semicolonxss.github.io/Formwheel/";
+
+    }
+  );
+
+
+/* =================================================
+   시작
+================================================= */
+
+await initializeAI();
+
+input.focus();

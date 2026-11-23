@@ -24,7 +24,7 @@
   <a class="logo fw-hub-logo" id="homeLogo" aria-label="FormWheel 메인으로 이동" href="https://semicolonxss.github.io/Formwheel/"><span class="fw-hub-form">Form</span><span class="fw-hub-icon" aria-hidden="true"></span><span class="fw-hub-wheel">Wheel</span></a>
 </header>
 
-<div class="container">
+<div class="container" role="main">
 
 <div class="layout">
 
@@ -45,7 +45,7 @@
       maxlength="500"
       placeholder="AI에게 말을 걸어보세요..."
       autocomplete="off"
-    >
+     aria-label="입력 내용">
 
     <button id="sendButton">
       보내기
@@ -85,7 +85,7 @@
 
   <div class="card">
 
-    <h3>📊 AI 상태</h3>
+    <h2>📊 AI 상태</h2>
 
     <div class="stat">
       <span>대화</span>
@@ -112,7 +112,7 @@
 
   <div class="card help">
 
-    <h3>📖 사용법</h3>
+    <h2>📖 사용법</h2>
 
     <p>
       처음에는 거의 아무것도 모르는 AI입니다.
@@ -164,7 +164,7 @@
 
   <div class="card">
 
-    <h3>🧠 기억</h3>
+    <h2>🧠 기억</h2>
 
     <div id="memoryList" class="memory">
       아직 기억이 없습니다.
@@ -175,7 +175,7 @@
 
   <div class="card">
 
-    <h3>🌱 발전 과정</h3>
+    <h2>🌱 발전 과정</h2>
 
     <div id="learningLog" class="learning-log">
       아직 학습 기록이 없습니다.
